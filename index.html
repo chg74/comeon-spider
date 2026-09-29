@@ -319,6 +319,15 @@ img{-webkit-user-drag:none;pointer-events:none}
     $('watchLoading').classList.remove('hidden');
 
     var url = (chan.url || '').trim();
+
+    // ✅ لو الرابط مبروكس بالغلط، ننضفه
+    if(url.indexOf('/api/proxy?url=') !== -1){
+      try{
+        var m = url.match(/\/api\/proxy\?url=(.+)$/);
+        if(m && m[1]) url = decodeURIComponent(m[1]);
+      }catch(e){}
+    }
+
     var player = $('player');
 
     if(!url){ showWatchError('لا يوجد رابط بث', ''); return; }
