@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // CORS headers عشان المتصفح يقبل الاستجابة
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
@@ -7,9 +8,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const targetUrl = req.query.url;
-  if (!targetUrl) return res.status(400).send('Missing url');
+  if (!targetUrl) return res.status(400).send('Missing url parameter');
 
   try {
+    // هيدرز بنقلد بيها متصفح حقيقي عشان بعض السيرفرات تسمح
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': '*/*',
@@ -17,7 +19,7 @@ export default async function handler(req, res) {
       'Referer': targetUrl,
     };
 
-    // مهم جداً: تمرير Range header
+    // مهم جداً للفيديو: تمرير Range header
     if (req.headers.range) {
       headers['Range'] = req.headers.range;
     }
@@ -31,6 +33,7 @@ export default async function handler(req, res) {
     const contentType = response.headers.get('content-type') || '';
     const isM3u8 = contentType.includes('mpegurl') || /\.m3u8(\?|#|$)/i.test(targetUrl);
 
+    // ============ لو ملف m3u8 (قائمة تشغيل) ============
     if (isM3u8) {
       let playlist = await response.text();
       const urlObj = new URL(targetUrl);
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
         const trimmed = line.trim();
         if (!trimmed) return line;
 
-        // معالجة التاجات اللي فيها URI= (زي #EXT-X-KEY و #EXT-X-MAP)
+        // معالجة التاجات اللي فيها URI= (زي #EXT-X-KEY و #EXT-X-MAP للتشفير)
         if (trimmed.startsWith('#')) {
           return line.replace(/URI="([^"]+)"/g, function(m, uri) {
             let fullUrl = uri;
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
           });
         }
 
-        // سطر عادي فيه رابط
+        // سطر عادي فيه رابط (segment .ts أو m3u8 فرعي)
         let fullUrl = trimmed;
         if (!/^https?:\/\//i.test(trimmed)) {
           fullUrl = new URL(trimmed, baseUrl).href;
@@ -64,7 +67,7 @@ export default async function handler(req, res) {
       return res.status(200).send(playlist);
     }
 
-    // للملفات الفعلية (.ts, .mp4, .aac)
+    // ============ للملفات الفعلية (.ts, .mp4, .aac) ============
     const buffer = await response.arrayBuffer();
     res.setHeader('Content-Type', contentType || 'video/mp2t');
     res.setHeader('Content-Length', buffer.byteLength);
