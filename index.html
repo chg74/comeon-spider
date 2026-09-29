@@ -202,6 +202,9 @@ img{-webkit-user-drag:none;pointer-events:none}
 (function(){
   'use strict';
 
+  /* ============================================================
+     Pantry Cloud
+     ============================================================ */
   var PANTRY_ID = '5dd567ce-5bb7-46a4-8005-d022dd892f32';
   var BASKET    = 'ankaboot_data';
   var CACHE_KEY = 'ankaboot_cached_data';
@@ -221,6 +224,7 @@ img{-webkit-user-drag:none;pointer-events:none}
     clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200);
   }
 
+  /* ===== Cloud API ===== */
   async function loadFromCloud(){
     try{
       var res = await fetch('https://getpantry.cloud/apiv1/pantry/' + PANTRY_ID + '/basket/' + BASKET + '?t=' + Date.now());
@@ -240,6 +244,7 @@ img{-webkit-user-drag:none;pointer-events:none}
     try{ localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }catch(e){}
   }
 
+  /* ===== Render ===== */
   function renderTelegram(){
     var url = state.telegram || 'https://t.me/alankabootsport';
     $('tgMini').href = url;
@@ -298,6 +303,9 @@ img{-webkit-user-drag:none;pointer-events:none}
     $(id).classList.add('active');
   }
 
+  /* ============================================================
+     PLAYER — يدعم أي رابط
+     ============================================================ */
   function destroyPlayer(){
     if(hlsInstance){ try{ hlsInstance.destroy(); }catch(e){} hlsInstance = null; }
     var p = $('player');
@@ -306,15 +314,110 @@ img{-webkit-user-drag:none;pointer-events:none}
     p.innerHTML = '';
   }
 
-  function showWatchError(msg){
+  function showWatchError(msg, url){
     var stage = document.querySelector('.watch-stage');
     var old = stage.querySelector('.watch-error');
     if(old) old.remove();
     var err = document.createElement('div');
     err.className = 'watch-error';
-    err.innerHTML = '<div class="ico">⚠️</div><h4>تعذر تشغيل البث</h4><p>' + esc(msg) + '</p>';
+    var safeUrl = esc(url).replace(/'/g, "\\'");
+    err.innerHTML = '<div class="ico">⚠️</div>'
+      + '<h4>تعذر تشغيل البث</h4>'
+      + '<p>' + esc(msg) + '</p>'
+      + '<p style="margin-top:14px;font-size:11px;color:#8695ac;word-break:break-all;direction:ltr;text-align:center;max-width:90%">' + esc(url) + '</p>'
+      + '<button type="button" onclick="window.__openExternal(\'' + safeUrl + '\')" '
+      + 'style="margin-top:16px;padding:12px 24px;border-radius:11px;background:linear-gradient(145deg,#f2c14e,#c9922c);color:#1a1206;font-weight:800;font-size:13px;border:0;cursor:pointer;font-family:Cairo,sans-serif">'
+      + '↗ فتح في مشغل خارجي'
+      + '</button>';
     stage.appendChild(err);
     $('watchLoading').classList.add('hidden');
+  }
+
+  window.__openExternal = function(url){
+    if(/Android/i.test(navigator.userAgent)){
+      var scheme = url.indexOf('https') === 0 ? 'https' : 'http';
+      var intentUrl = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=' + scheme + ';type=application/x-mpegURL;end';
+      try{ window.location.href = intentUrl; return; }catch(e){}
+    }
+    window.open(url, '_blank');
+  };
+
+  function tryPlayHls(url, video, attempt){
+    attempt = attempt || 1;
+
+    if(!window.Hls || !window.Hls.isSupported()){
+      if(video.canPlayType('application/vnd.apple.mpegurl')){
+        video.src = url;
+        video.addEventListener('loadedmetadata', function(){ $('watchLoading').classList.add('hidden'); });
+        video.addEventListener('error', function(){ showWatchError('الرابط لا يعمل', url); });
+        video.play().catch(function(){});
+      } else {
+        showWatchError('المتصفح لا يدعم هذا النوع من البث', url);
+      }
+      return;
+    }
+
+    hlsInstance = new Hls({
+      lowLatencyMode: true,
+      enableWorker: true,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      manifestLoadingTimeOut: 20000,
+      manifestLoadingMaxRetry: 3,
+      levelLoadingTimeOut: 20000,
+      levelLoadingMaxRetry: 3,
+      fragLoadingTimeOut: 30000,
+      fragLoadingMaxRetry: 6,
+      startLevel: -1,
+      capLevelToPlayerSize: true
+    });
+
+    var manifestLoaded = false;
+    var timeoutId = setTimeout(function(){
+      if(!manifestLoaded){
+        if(attempt < 3){
+          try{ hlsInstance.destroy(); }catch(e){}
+          tryPlayHls(url, video, attempt + 1);
+        } else {
+          showWatchError('انتهت مهلة التحميل — قد يكون الرابط محمي', url);
+        }
+      }
+    }, 22000);
+
+    hlsInstance.loadSource(url);
+    hlsInstance.attachMedia(video);
+
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(){
+      manifestLoaded = true;
+      clearTimeout(timeoutId);
+      $('watchLoading').classList.add('hidden');
+      video.play().catch(function(){});
+    });
+
+    hlsInstance.on(Hls.Events.ERROR, function(e, data){
+      if(!data.fatal) return;
+      if(data.type === Hls.ErrorTypes.NETWORK_ERROR){
+        if(data.details === 'manifestLoadError' || data.details === 'manifestParsingError'){
+          if(attempt < 3){
+            clearTimeout(timeoutId);
+            setTimeout(function(){
+              try{ hlsInstance.destroy(); }catch(e){}
+              tryPlayHls(url, video, attempt + 1);
+            }, 1200 * attempt);
+          } else {
+            clearTimeout(timeoutId);
+            showWatchError('فشل تحميل الرابط — قد يكون محمياً أو غير متاح', url);
+          }
+        } else {
+          try{ hlsInstance.startLoad(); }catch(e){}
+        }
+      } else if(data.type === Hls.ErrorTypes.MEDIA_ERROR){
+        try{ hlsInstance.recoverMediaError(); }catch(e){}
+      } else {
+        clearTimeout(timeoutId);
+        showWatchError('خطأ غير متوقع في البث', url);
+      }
+    });
   }
 
   function openWatch(catId, chanId){
@@ -322,53 +425,86 @@ img{-webkit-user-drag:none;pointer-events:none}
     if(!cat) return;
     var chan = (cat.channels||[]).find(function(c){ return c.id === chanId; });
     if(!chan) return;
+
     $('watchName').textContent = chan.name;
     $('watchCat').textContent = cat.name;
     $('watch').classList.add('open');
     document.body.style.overflow = 'hidden';
+
     destroyPlayer();
     var stage = document.querySelector('.watch-stage');
     var oldErr = stage.querySelector('.watch-error');
     if(oldErr) oldErr.remove();
     $('watchLoading').classList.remove('hidden');
+
     var url = (chan.url || '').trim();
     var player = $('player');
-    if(!url){ showWatchError('لا يوجد رابط بث'); return; }
-    var isHls = /\.m3u8(\?|#|$)/i.test(url);
-    if(isHls){
-      var video = document.createElement('video');
-      video.controls = true; video.autoplay = true; video.playsInline = true;
-      video.setAttribute('oncontextmenu','return false');
-      player.appendChild(video);
-      if(window.Hls && window.Hls.isSupported()){
-        hlsInstance = new Hls({ lowLatencyMode:true, enableWorker:true });
-        hlsInstance.loadSource(url);
-        hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(){
-          $('watchLoading').classList.add('hidden');
-          video.play().catch(function(){});
-        });
-        hlsInstance.on(Hls.Events.ERROR, function(e, data){
-          if(data.fatal){
-            if(data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsInstance.startLoad();
-            else if(data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
-            else showWatchError('الرابط لا يعمل');
-          }
-        });
-      } else if(video.canPlayType('application/vnd.apple.mpegurl')){
-        video.src = url;
-        video.addEventListener('loadedmetadata', function(){ $('watchLoading').classList.add('hidden'); });
-        video.addEventListener('error', function(){ showWatchError('الرابط لا يعمل'); });
-        video.play().catch(function(){});
-      } else { showWatchError('المتصفح لا يدعم البث'); }
-    } else {
+
+    if(!url){ showWatchError('لا يوجد رابط بث', ''); return; }
+
+    // كشف نوع الرابط
+    var isIframe = /\.(html?|php|aspx?)(\?|#|$)/i.test(url) && !/m3u8/i.test(url);
+    var looksLikeHls = /m3u8/i.test(url) || /\.ts(\?|#|$)/i.test(url);
+
+    if(isIframe){
       var frame = document.createElement('iframe');
       frame.src = url; frame.allowFullscreen = true;
       frame.setAttribute('allow','autoplay; fullscreen; encrypted-media');
       frame.setAttribute('referrerpolicy','no-referrer');
+      frame.setAttribute('scrolling','no');
       player.appendChild(frame);
       setTimeout(function(){ $('watchLoading').classList.add('hidden'); }, 2500);
+      return;
     }
+
+    if(looksLikeHls){
+      var video = document.createElement('video');
+      video.controls = true; video.autoplay = true; video.playsInline = true;
+      video.setAttribute('controlsList','nodownload');
+      video.setAttribute('oncontextmenu','return false');
+      player.appendChild(video);
+      tryPlayHls(url, video, 1);
+      return;
+    }
+
+    // رابط غير معروف → جرب video مباشر الأول
+    var video2 = document.createElement('video');
+    video2.controls = true; video2.autoplay = true; video2.playsInline = true;
+    video2.setAttribute('oncontextmenu','return false');
+    video2.src = url;
+
+    var switched = false;
+    var t2 = setTimeout(function(){
+      if(!switched && video2.readyState < 2){
+        switched = true;
+        try{ video2.remove(); }catch(e){}
+        player.innerHTML = '';
+        var video3 = document.createElement('video');
+        video3.controls = true; video3.autoplay = true; video3.playsInline = true;
+        player.appendChild(video3);
+        tryPlayHls(url, video3, 1);
+      }
+    }, 7000);
+
+    video2.addEventListener('loadeddata', function(){
+      clearTimeout(t2); switched = true;
+      $('watchLoading').classList.add('hidden');
+      video2.play().catch(function(){});
+    });
+
+    video2.addEventListener('error', function(){
+      clearTimeout(t2);
+      if(switched) return;
+      switched = true;
+      try{ video2.remove(); }catch(e){}
+      player.innerHTML = '';
+      var video3 = document.createElement('video');
+      video3.controls = true; video3.autoplay = true; video3.playsInline = true;
+      player.appendChild(video3);
+      tryPlayHls(url, video3, 1);
+    });
+
+    player.appendChild(video2);
   }
 
   function closeWatch(){
@@ -378,6 +514,7 @@ img{-webkit-user-drag:none;pointer-events:none}
     if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
   }
 
+  /* ===== Events ===== */
   $('catGrid').addEventListener('click', function(e){
     var card = e.target.closest('.cat-card');
     if(!card) return;
@@ -402,12 +539,15 @@ img{-webkit-user-drag:none;pointer-events:none}
     if(e.key === 'Escape' && $('watch').classList.contains('open')) closeWatch();
   });
 
-  /* ===== Sync from cloud every 5 seconds ===== */
-  async function syncFromCloud(){
+  /* ============================================================
+     SYNC — تحديث فوري
+     ============================================================ */
+  async function syncFromCloud(silent){
     var cloud = await loadFromCloud();
     if(!cloud || !cloud.categories) return;
     var json = JSON.stringify(cloud);
     if(json === lastCloudJson) return;
+    var wasEmpty = state.categories.length === 0;
     lastCloudJson = json;
     state = {
       telegram: cloud.telegram || 'https://t.me/alankabootsport',
@@ -421,11 +561,19 @@ img{-webkit-user-drag:none;pointer-events:none}
       if(still) renderChannels(currentCatId);
       else { showScreen('screenHome'); currentCatId = null; }
     }
-    toast('تم تحديث القنوات 🔄');
+    if(!silent && !wasEmpty) toast('تم تحديث القنوات 🔄');
   }
 
-  setInterval(syncFromCloud, 5000);
+  // كل 1.5 ثانية
+  setInterval(function(){ syncFromCloud(false); }, 1500);
 
+  // عند الرجوع للموقع
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) syncFromCloud(true);
+  });
+  window.addEventListener('focus', function(){ syncFromCloud(true); });
+
+  /* ===== Init ===== */
   async function init(){
     var cached = loadFromCache();
     if(cached && cached.categories){
@@ -434,6 +582,7 @@ img{-webkit-user-drag:none;pointer-events:none}
       renderTelegram();
       renderHome();
     }
+
     var cloud = await loadFromCloud();
     if(cloud && cloud.categories){
       state = {
@@ -443,6 +592,7 @@ img{-webkit-user-drag:none;pointer-events:none}
       lastCloudJson = JSON.stringify(cloud);
       saveToCache(state);
     }
+
     renderTelegram();
     renderHome();
     $('appLoading').classList.add('hidden');
