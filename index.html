@@ -202,9 +202,6 @@ img{-webkit-user-drag:none;pointer-events:none}
 (function(){
   'use strict';
 
-  /* ============================================================
-     Pantry Cloud
-     ============================================================ */
   var PANTRY_ID = '5dd567ce-5bb7-46a4-8005-d022dd892f32';
   var BASKET    = 'ankaboot_data';
   var CACHE_KEY = 'ankaboot_cached_data';
@@ -224,7 +221,7 @@ img{-webkit-user-drag:none;pointer-events:none}
     clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200);
   }
 
-  /* ===== Cloud API ===== */
+  /* ===== Cloud ===== */
   async function loadFromCloud(){
     try{
       var res = await fetch('https://getpantry.cloud/apiv1/pantry/' + PANTRY_ID + '/basket/' + BASKET + '?t=' + Date.now());
@@ -232,43 +229,22 @@ img{-webkit-user-drag:none;pointer-events:none}
       return await res.json();
     }catch(e){ return null; }
   }
+  function loadFromCache(){ try{ var raw = localStorage.getItem(CACHE_KEY); if(!raw) return null; return JSON.parse(raw); }catch(e){ return null; } }
+  function saveToCache(data){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }catch(e){} }
 
-  function loadFromCache(){
-    try{
-      var raw = localStorage.getItem(CACHE_KEY);
-      if(!raw) return null;
-      return JSON.parse(raw);
-    }catch(e){ return null; }
-  }
-  function saveToCache(data){
-    try{ localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }catch(e){}
-  }
-
-  /* ===== Render ===== */
-  function renderTelegram(){
-    var url = state.telegram || 'https://t.me/alankabootsport';
-    $('tgMini').href = url;
-  }
+  function renderTelegram(){ var url = state.telegram || 'https://t.me/alankabootsport'; $('tgMini').href = url; }
 
   function renderHome(){
     var grid = $('catGrid');
     var cats = state.categories;
     $('homeCount').textContent = cats.length;
     if(!cats.length){
-      grid.innerHTML = '<div class="empty-box" style="grid-column:1/-1">'
-        + '<div class="ico">📭</div><h4>لا توجد أقسام بعد</h4>'
-        + '<p>افتح لوحة التحكم وأضف قسماً ثم أضف القنوات جواه.</p></div>';
+      grid.innerHTML = '<div class="empty-box" style="grid-column:1/-1"><div class="ico">📭</div><h4>لا توجد أقسام بعد</h4><p>افتح لوحة التحكم وأضف قسماً ثم أضف القنوات جواه.</p></div>';
       return;
     }
     grid.innerHTML = cats.map(function(cat){
-      var icon = cat.logo
-        ? '<img src="' + esc(cat.logo) + '" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + esc(initials(cat.name)) + '\'">'
-        : esc(initials(cat.name));
-      return '<button class="cat-card" data-cat="' + cat.id + '">'
-        + '<div class="cat-icon">' + icon + '</div>'
-        + '<div class="name">' + esc(cat.name) + '</div>'
-        + '<div class="meta"><span>📺</span><span>' + (cat.channels||[]).length + ' قناة</span></div>'
-      + '</button>';
+      var icon = cat.logo ? '<img src="' + esc(cat.logo) + '" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + esc(initials(cat.name)) + '\'">' : esc(initials(cat.name));
+      return '<button class="cat-card" data-cat="' + cat.id + '"><div class="cat-icon">' + icon + '</div><div class="name">' + esc(cat.name) + '</div><div class="meta"><span>📺</span><span>' + (cat.channels||[]).length + ' قناة</span></div></button>';
     }).join('');
   }
 
@@ -280,31 +256,17 @@ img{-webkit-user-drag:none;pointer-events:none}
     $('catCounter').textContent = (cat.channels||[]).length + ' قناة';
     var grid = $('chanGrid');
     var chans = cat.channels || [];
-    if(!chans.length){
-      grid.innerHTML = '<div class="empty-box" style="grid-column:1/-1">'
-        + '<div class="ico">📺</div><h4>لا توجد قنوات في هذا القسم</h4></div>';
-      return;
-    }
+    if(!chans.length){ grid.innerHTML = '<div class="empty-box" style="grid-column:1/-1"><div class="ico">📺</div><h4>لا توجد قنوات في هذا القسم</h4></div>'; return; }
     grid.innerHTML = chans.map(function(ch){
-      var logo = ch.logo
-        ? '<img src="' + esc(ch.logo) + '" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + esc(initials(ch.name)) + '\'">'
-        : esc(initials(ch.name));
-      return '<button class="chan-card" data-chan="' + ch.id + '">'
-        + '<span class="chan-logo">' + logo + '</span>'
-        + '<span class="chan-info"><b>' + esc(ch.name) + '</b><small>اضغط للمشاهدة</small></span>'
-        + '<span class="chan-play">▶</span>'
-      + '</button>';
+      var logo = ch.logo ? '<img src="' + esc(ch.logo) + '" onerror="this.style.display=\'none\';this.parentNode.textContent=\'' + esc(initials(ch.name)) + '\'">' : esc(initials(ch.name));
+      return '<button class="chan-card" data-chan="' + ch.id + '"><span class="chan-logo">' + logo + '</span><span class="chan-info"><b>' + esc(ch.name) + '</b><small>اضغط للمشاهدة</small></span><span class="chan-play">▶</span></button>';
     }).join('');
   }
 
-  function showScreen(id){
-    var ss = document.querySelectorAll('.screen');
-    for(var i=0;i<ss.length;i++) ss[i].classList.remove('active');
-    $(id).classList.add('active');
-  }
+  function showScreen(id){ var ss = document.querySelectorAll('.screen'); for(var i=0;i<ss.length;i++) ss[i].classList.remove('active'); $(id).classList.add('active'); }
 
   /* ============================================================
-     PLAYER — يدعم أي رابط
+     PLAYER — يستخدم البروكسي /api/proxy
      ============================================================ */
   function destroyPlayer(){
     if(hlsInstance){ try{ hlsInstance.destroy(); }catch(e){} hlsInstance = null; }
@@ -321,14 +283,11 @@ img{-webkit-user-drag:none;pointer-events:none}
     var err = document.createElement('div');
     err.className = 'watch-error';
     var safeUrl = esc(url).replace(/'/g, "\\'");
-    err.innerHTML = '<div class="ico">⚠️</div>'
-      + '<h4>تعذر تشغيل البث</h4>'
-      + '<p>' + esc(msg) + '</p>'
+    err.innerHTML = '<div class="ico">⚠️</div><h4>تعذر تشغيل البث</h4><p>' + esc(msg) + '</p>'
       + '<p style="margin-top:14px;font-size:11px;color:#8695ac;word-break:break-all;direction:ltr;text-align:center;max-width:90%">' + esc(url) + '</p>'
       + '<button type="button" onclick="window.__openExternal(\'' + safeUrl + '\')" '
       + 'style="margin-top:16px;padding:12px 24px;border-radius:11px;background:linear-gradient(145deg,#f2c14e,#c9922c);color:#1a1206;font-weight:800;font-size:13px;border:0;cursor:pointer;font-family:Cairo,sans-serif">'
-      + '↗ فتح في مشغل خارجي'
-      + '</button>';
+      + '↗ فتح في مشغل خارجي</button>';
     stage.appendChild(err);
     $('watchLoading').classList.add('hidden');
   }
@@ -341,84 +300,6 @@ img{-webkit-user-drag:none;pointer-events:none}
     }
     window.open(url, '_blank');
   };
-
-  function tryPlayHls(url, video, attempt){
-    attempt = attempt || 1;
-
-    if(!window.Hls || !window.Hls.isSupported()){
-      if(video.canPlayType('application/vnd.apple.mpegurl')){
-        video.src = url;
-        video.addEventListener('loadedmetadata', function(){ $('watchLoading').classList.add('hidden'); });
-        video.addEventListener('error', function(){ showWatchError('الرابط لا يعمل', url); });
-        video.play().catch(function(){});
-      } else {
-        showWatchError('المتصفح لا يدعم هذا النوع من البث', url);
-      }
-      return;
-    }
-
-    hlsInstance = new Hls({
-      lowLatencyMode: true,
-      enableWorker: true,
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
-      manifestLoadingTimeOut: 20000,
-      manifestLoadingMaxRetry: 3,
-      levelLoadingTimeOut: 20000,
-      levelLoadingMaxRetry: 3,
-      fragLoadingTimeOut: 30000,
-      fragLoadingMaxRetry: 6,
-      startLevel: -1,
-      capLevelToPlayerSize: true
-    });
-
-    var manifestLoaded = false;
-    var timeoutId = setTimeout(function(){
-      if(!manifestLoaded){
-        if(attempt < 3){
-          try{ hlsInstance.destroy(); }catch(e){}
-          tryPlayHls(url, video, attempt + 1);
-        } else {
-          showWatchError('انتهت مهلة التحميل — قد يكون الرابط محمي', url);
-        }
-      }
-    }, 22000);
-
-    hlsInstance.loadSource(url);
-    hlsInstance.attachMedia(video);
-
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(){
-      manifestLoaded = true;
-      clearTimeout(timeoutId);
-      $('watchLoading').classList.add('hidden');
-      video.play().catch(function(){});
-    });
-
-    hlsInstance.on(Hls.Events.ERROR, function(e, data){
-      if(!data.fatal) return;
-      if(data.type === Hls.ErrorTypes.NETWORK_ERROR){
-        if(data.details === 'manifestLoadError' || data.details === 'manifestParsingError'){
-          if(attempt < 3){
-            clearTimeout(timeoutId);
-            setTimeout(function(){
-              try{ hlsInstance.destroy(); }catch(e){}
-              tryPlayHls(url, video, attempt + 1);
-            }, 1200 * attempt);
-          } else {
-            clearTimeout(timeoutId);
-            showWatchError('فشل تحميل الرابط — قد يكون محمياً أو غير متاح', url);
-          }
-        } else {
-          try{ hlsInstance.startLoad(); }catch(e){}
-        }
-      } else if(data.type === Hls.ErrorTypes.MEDIA_ERROR){
-        try{ hlsInstance.recoverMediaError(); }catch(e){}
-      } else {
-        clearTimeout(timeoutId);
-        showWatchError('خطأ غير متوقع في البث', url);
-      }
-    });
-  }
 
   function openWatch(catId, chanId){
     var cat = state.categories.find(function(c){ return c.id === catId; });
@@ -442,69 +323,64 @@ img{-webkit-user-drag:none;pointer-events:none}
 
     if(!url){ showWatchError('لا يوجد رابط بث', ''); return; }
 
-    // كشف نوع الرابط
-    var isIframe = /\.(html?|php|aspx?)(\?|#|$)/i.test(url) && !/m3u8/i.test(url);
-    var looksLikeHls = /m3u8/i.test(url) || /\.ts(\?|#|$)/i.test(url);
-
-    if(isIframe){
+    // روابط iframe
+    if(/\.(html?|php|aspx?)(\?|#|$)/i.test(url) && !/m3u8/i.test(url)){
       var frame = document.createElement('iframe');
       frame.src = url; frame.allowFullscreen = true;
       frame.setAttribute('allow','autoplay; fullscreen; encrypted-media');
       frame.setAttribute('referrerpolicy','no-referrer');
-      frame.setAttribute('scrolling','no');
       player.appendChild(frame);
       setTimeout(function(){ $('watchLoading').classList.add('hidden'); }, 2500);
       return;
     }
 
-    if(looksLikeHls){
-      var video = document.createElement('video');
-      video.controls = true; video.autoplay = true; video.playsInline = true;
-      video.setAttribute('controlsList','nodownload');
-      video.setAttribute('oncontextmenu','return false');
-      player.appendChild(video);
-      tryPlayHls(url, video, 1);
-      return;
+    // كل الروابط التانية → بروكسي + hls.js
+    var video = document.createElement('video');
+    video.controls = true; video.autoplay = true; video.playsInline = true;
+    video.setAttribute('controlsList','nodownload');
+    video.setAttribute('oncontextmenu','return false');
+    player.appendChild(video);
+
+    // ⭐ استخدام البروكسي
+    var proxiedUrl = '/api/proxy?url=' + encodeURIComponent(url);
+
+    if(window.Hls && window.Hls.isSupported()){
+      hlsInstance = new Hls({
+        lowLatencyMode: true,
+        enableWorker: true,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingTimeOut: 20000,
+        levelLoadingMaxRetry: 3,
+        fragLoadingTimeOut: 30000,
+        fragLoadingMaxRetry: 6,
+        startLevel: -1
+      });
+
+      hlsInstance.loadSource(proxiedUrl);
+      hlsInstance.attachMedia(video);
+
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(){
+        $('watchLoading').classList.add('hidden');
+        video.play().catch(function(){});
+      });
+
+      hlsInstance.on(Hls.Events.ERROR, function(e, data){
+        if(!data.fatal) return;
+        if(data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsInstance.startLoad();
+        else if(data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
+        else showWatchError('الرابط لا يعمل', url);
+      });
+    } else if(video.canPlayType('application/vnd.apple.mpegurl')){
+      video.src = proxiedUrl;
+      video.addEventListener('loadedmetadata', function(){ $('watchLoading').classList.add('hidden'); });
+      video.addEventListener('error', function(){ showWatchError('الرابط لا يعمل', url); });
+      video.play().catch(function(){});
+    } else {
+      showWatchError('المتصفح لا يدعم هذا النوع من البث', url);
     }
-
-    // رابط غير معروف → جرب video مباشر الأول
-    var video2 = document.createElement('video');
-    video2.controls = true; video2.autoplay = true; video2.playsInline = true;
-    video2.setAttribute('oncontextmenu','return false');
-    video2.src = url;
-
-    var switched = false;
-    var t2 = setTimeout(function(){
-      if(!switched && video2.readyState < 2){
-        switched = true;
-        try{ video2.remove(); }catch(e){}
-        player.innerHTML = '';
-        var video3 = document.createElement('video');
-        video3.controls = true; video3.autoplay = true; video3.playsInline = true;
-        player.appendChild(video3);
-        tryPlayHls(url, video3, 1);
-      }
-    }, 7000);
-
-    video2.addEventListener('loadeddata', function(){
-      clearTimeout(t2); switched = true;
-      $('watchLoading').classList.add('hidden');
-      video2.play().catch(function(){});
-    });
-
-    video2.addEventListener('error', function(){
-      clearTimeout(t2);
-      if(switched) return;
-      switched = true;
-      try{ video2.remove(); }catch(e){}
-      player.innerHTML = '';
-      var video3 = document.createElement('video');
-      video3.controls = true; video3.autoplay = true; video3.playsInline = true;
-      player.appendChild(video3);
-      tryPlayHls(url, video3, 1);
-    });
-
-    player.appendChild(video2);
   }
 
   function closeWatch(){
@@ -515,44 +391,21 @@ img{-webkit-user-drag:none;pointer-events:none}
   }
 
   /* ===== Events ===== */
-  $('catGrid').addEventListener('click', function(e){
-    var card = e.target.closest('.cat-card');
-    if(!card) return;
-    renderChannels(card.dataset.cat);
-    showScreen('screenChans');
-  });
+  $('catGrid').addEventListener('click', function(e){ var card = e.target.closest('.cat-card'); if(!card) return; renderChannels(card.dataset.cat); showScreen('screenChans'); });
   $('backHomeBtn').addEventListener('click', function(){ showScreen('screenHome'); });
-  $('chanGrid').addEventListener('click', function(e){
-    var card = e.target.closest('.chan-card');
-    if(!card || !currentCatId) return;
-    openWatch(currentCatId, card.dataset.chan);
-  });
+  $('chanGrid').addEventListener('click', function(e){ var card = e.target.closest('.chan-card'); if(!card || !currentCatId) return; openWatch(currentCatId, card.dataset.chan); });
   $('closeWatch').addEventListener('click', closeWatch);
-  $('fsBtn').addEventListener('click', function(){
-    var el = $('watch');
-    if(!document.fullscreenElement){
-      if(el.requestFullscreen) el.requestFullscreen();
-      else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-    } else { if(document.exitFullscreen) document.exitFullscreen(); }
-  });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && $('watch').classList.contains('open')) closeWatch();
-  });
+  $('fsBtn').addEventListener('click', function(){ var el = $('watch'); if(!document.fullscreenElement){ if(el.requestFullscreen) el.requestFullscreen(); else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen(); } else { if(document.exitFullscreen) document.exitFullscreen(); } });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && $('watch').classList.contains('open')) closeWatch(); });
 
-  /* ============================================================
-     SYNC — تحديث فوري
-     ============================================================ */
+  /* ===== Sync ===== */
   async function syncFromCloud(silent){
     var cloud = await loadFromCloud();
     if(!cloud || !cloud.categories) return;
     var json = JSON.stringify(cloud);
     if(json === lastCloudJson) return;
-    var wasEmpty = state.categories.length === 0;
     lastCloudJson = json;
-    state = {
-      telegram: cloud.telegram || 'https://t.me/alankabootsport',
-      categories: cloud.categories
-    };
+    state = { telegram: cloud.telegram || 'https://t.me/alankabootsport', categories: cloud.categories };
     saveToCache(state);
     renderTelegram();
     renderHome();
@@ -561,41 +414,20 @@ img{-webkit-user-drag:none;pointer-events:none}
       if(still) renderChannels(currentCatId);
       else { showScreen('screenHome'); currentCatId = null; }
     }
-    if(!silent && !wasEmpty) toast('تم تحديث القنوات 🔄');
+    if(!silent) toast('تم تحديث القنوات 🔄');
   }
 
-  // كل 1.5 ثانية
   setInterval(function(){ syncFromCloud(false); }, 1500);
-
-  // عند الرجوع للموقع
-  document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) syncFromCloud(true);
-  });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncFromCloud(true); });
   window.addEventListener('focus', function(){ syncFromCloud(true); });
 
   /* ===== Init ===== */
   async function init(){
     var cached = loadFromCache();
-    if(cached && cached.categories){
-      state = cached;
-      lastCloudJson = JSON.stringify(cached);
-      renderTelegram();
-      renderHome();
-    }
-
+    if(cached && cached.categories){ state = cached; lastCloudJson = JSON.stringify(cached); renderTelegram(); renderHome(); }
     var cloud = await loadFromCloud();
-    if(cloud && cloud.categories){
-      state = {
-        telegram: cloud.telegram || 'https://t.me/alankabootsport',
-        categories: cloud.categories
-      };
-      lastCloudJson = JSON.stringify(cloud);
-      saveToCache(state);
-    }
-
-    renderTelegram();
-    renderHome();
-    $('appLoading').classList.add('hidden');
+    if(cloud && cloud.categories){ state = { telegram: cloud.telegram || 'https://t.me/alankabootsport', categories: cloud.categories }; lastCloudJson = JSON.stringify(cloud); saveToCache(state); }
+    renderTelegram(); renderHome(); $('appLoading').classList.add('hidden');
   }
 
   document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
